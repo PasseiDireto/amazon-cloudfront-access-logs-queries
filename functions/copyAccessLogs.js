@@ -15,14 +15,14 @@ const datePattern = '[^\\d](\\d{4})-(\\d{2})-(\\d{2})-(\\d{2})[^\\d]';
 const filenamePattern = '[^/]+$';
 
 exports.handler = async (event, context, callback) => {
-  const moves = event.Records.map(record => {
+  const copies = event.Records.map(record => {
     const bucket = record.s3.bucket.name;
     const sourceKey = record.s3.object.key;
 
     const sourceRegex = new RegExp(datePattern, 'g');
     const match = sourceRegex.exec(sourceKey);
     if (match == null) {
-      console.log(`Object key ${sourceKey} does not look like an access log file, so it will not be moved.`);
+      console.log(`Object key ${sourceKey} does not look like an access log file, so it will not be copied.`);
     } else {
       const [, year, month, day, hour] = match;
 
@@ -39,13 +39,8 @@ exports.handler = async (event, context, callback) => {
       };
       const copy = s3.copyObject(copyParams).promise();
 
-      const deleteParams = { Bucket: bucket, Key: sourceKey };
-
       return copy.then(function () {
-        console.log(`Copied. Now deleting ${sourceKey}.`);
-        const del = s3.deleteObject(deleteParams).promise();
-        console.log(`Deleted ${sourceKey}.`);
-        return del;
+        console.log(`Copied ${sourceKey}.`);
       }, function (reason) {
         var error = new Error(`Error while copying ${sourceKey}: ${reason}`);
         callback(error);
@@ -53,5 +48,5 @@ exports.handler = async (event, context, callback) => {
 
     }
   });
-  await Promise.all(moves);
+  await Promise.all(copies);
 };

@@ -4,7 +4,7 @@ Description: >
     Stack that deploys a bucket which you can use as a target for your
     Amazon CloudFront access logs (use the prefix 'new/'). An event
     notification is configured so that new objects created will fire an
-    AWS Lambda function that moves the objects to prefixes (under
+    AWS Lambda function that copies the objects to prefixes (under
     'partitioned-gz/') that adhere to the Apache Hive partitioning format.
     This way the data is easier to consume for big data tools (as Amazon
     Athena and AWS Glue).
@@ -30,7 +30,7 @@ Parameters:
     Default: 'partitioned-gz/'
     AllowedPattern: '[A-Za-z0-9\-]+/'
     Description: >
-        Prefix of gzip'ed access log files that are moved to the Apache Hive
+        Prefix of gzip'ed access log files that are copied to the Apache Hive
         like style. Including the trailing slash.
   ParquetKeyPrefix: 
     Type: String
@@ -39,13 +39,17 @@ Parameters:
     Description: >
         Prefix of parquet files that are created in Apache Hive
         like style by the CTAS query. Including the trailing slash.
+  GlueDatabaseName:
+    Type: String
+    Description: >
+        AWS Glue Database to create tables for
 Resources:
     TransformMissingGzDataDailyFn:
         Type: AWS::Serverless::Function
         Properties:
             CodeUri: functions/
             Handler: transformMissingGzDataDaily.handler
-            Runtime: nodejs12.x
+            Runtime: nodejs14.x
             Timeout: 900
             Policies:
             - Version: '2012-10-17'
@@ -81,7 +85,7 @@ Resources:
                 Variables:
                     SOURCE_TABLE: !Ref PartitionedGzTable
                     TARGET_TABLE: !Ref PartitionedParquetTable
-                    DATABASE: !Ref CfLogsDatabase
+                    DATABASE: !Ref GlueDatabaseName
                     ATHENA_QUERY_RESULTS_LOCATION: !Sub "s3://${ResourcePrefix}-${AWS::AccountId}-cf-access-logs/athena-query-results"
             Events:
               HourlyEvt:
@@ -94,7 +98,7 @@ Resources:
         Properties:
             CodeUri: functions/
             Handler: transformPartition.handler
-            Runtime: nodejs12.x
+            Runtime: nodejs14.x
             Timeout: 900
             Policies:
             - Version: '2012-10-17'
@@ -130,7 +134,7 @@ Resources:
                 Variables:
                     SOURCE_TABLE: !Ref PartitionedGzTable
                     TARGET_TABLE: !Ref PartitionedParquetTable
-                    DATABASE: !Ref CfLogsDatabase
+                    DATABASE: !Ref GlueDatabaseName
                     ATHENA_QUERY_RESULTS_LOCATION: !Sub "s3://${ResourcePrefix}-${AWS::AccountId}-cf-access-logs/athena-query-results"
             Events:
               HourlyEvt:
@@ -142,7 +146,7 @@ Resources:
         Properties:
             CodeUri: functions/
             Handler: createPartitions.handler
-            Runtime: nodejs12.x
+            Runtime: nodejs14.x
             Timeout: 5
             Policies:
             - Version: '2012-10-17'
@@ -171,19 +175,19 @@ Resources:
             Environment:
                 Variables:
                     TABLE: !Ref PartitionedGzTable
-                    DATABASE: !Ref CfLogsDatabase
+                    DATABASE: !Ref GlueDatabaseName
                     ATHENA_QUERY_RESULTS_LOCATION: !Sub "s3://${ResourcePrefix}-${AWS::AccountId}-cf-access-logs/athena-query-results"
             Events:
               HourlyEvt:
                 Type: Schedule
                 Properties:
                   Schedule: cron(55 * * * ? *)
-    MoveNewAccessLogsFn:
+    CopyNewAccessLogsFn:
         Type: AWS::Serverless::Function
         Properties:
             CodeUri: functions/
-            Handler: moveAccessLogs.handler
-            Runtime: nodejs12.x
+            Handler: copyAccessLogs.handler
+            Runtime: nodejs14.x
             Timeout: 30
             Policies:
             - Version: '2012-10-17'
@@ -191,7 +195,6 @@ Resources:
                 - Effect: Allow
                   Action:
                     - s3:GetObject
-                    - s3:DeleteObject
                   Resource: !Sub "arn:${AWS::Partition}:s3:::${ResourcePrefix}-${AWS::AccountId}-cf-access-logs/${NewKeyPrefix}*"
                 - Effect: Allow
                   Action:
@@ -243,24 +246,17 @@ Resources:
                 "aws:SecureTransport": "false"
 
 # Glue Resources
-# - Database
 # - Partitioned Gzip Table
 # - Partitioned Parquet Table
 # - Combined view of both tables
 
-    CfLogsDatabase:
-        Type: AWS::Glue::Database
-        Properties:
-          CatalogId: !Ref AWS::AccountId
-          DatabaseInput:
-            Name: !Sub "${ResourcePrefix}_cf_access_logs_db"
     PartitionedGzTable:
       Type: AWS::Glue::Table
       Properties:
         CatalogId: !Ref AWS::AccountId
-        DatabaseName: !Ref CfLogsDatabase
+        DatabaseName: !Ref GlueDatabaseName
         TableInput:
-          Name: 'partitioned_gz'
+          Name: 'poc_cf_partitioned_gz'
           Description: 'Gzip logs delivered by Amazon CloudFront partitioned'
           TableType: EXTERNAL_TABLE
           Parameters: { "skip.header.line.count": "2" }
@@ -353,9 +349,9 @@ Resources:
       Type: AWS::Glue::Table
       Properties:
         CatalogId: !Ref AWS::AccountId
-        DatabaseName: !Ref CfLogsDatabase
+        DatabaseName: !Ref GlueDatabaseName
         TableInput:
-          Name: 'partitioned_parquet'
+          Name: 'poc_cf_partitioned_parquet'
           Description: 'Parquet format access logs as transformed from gzip version'
           TableType: EXTERNAL_TABLE
           Parameters: { 'has_encrypted_data': 'false', 'parquet.compression': 'SNAPPY' }
@@ -445,9 +441,9 @@ Resources:
       Type: AWS::Glue::Table
       Properties:
         CatalogId: !Ref AWS::AccountId
-        DatabaseName: !Ref CfLogsDatabase
+        DatabaseName: !Ref GlueDatabaseName
         TableInput:
-          Name: 'combined'
+          Name: 'poc_cf_combined'
           Description: 'combined view over gzip and parquet tables'
           TableType: VIRTUAL_VIEW
           Parameters: { 'presto_view': 'true' }
@@ -583,7 +579,7 @@ Resources:
                         {"name": "file", "type": "varchar"}
                       ]
                     }
-                  - { database: !Ref CfLogsDatabase,
+                  - { database: !Ref GlueDatabaseName,
                     partitioned_gz_table: !Ref PartitionedGzTable,
                     partitioned_parquet_table: !Ref PartitionedParquetTable }
               - ' */'

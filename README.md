@@ -15,9 +15,9 @@ This application is available in the AWS Serverless Application Repository. You 
 
 The application has two main parts:
 
-- An S3 bucket `<StackName>-cf-access-logs` that serves as a log bucket for Amazon CloudFront access logs. As soon as Amazon CloudFront delivers a new access logs file, an event triggers the AWS Lambda function `moveAccessLogs`. This moves the file to an [Apache Hive style](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-AlterPartition) prefix.
+- An S3 bucket `<StackName>-cf-access-logs` that serves as a log bucket for Amazon CloudFront access logs. As soon as Amazon CloudFront delivers a new access logs file, an event triggers the AWS Lambda function `copyAccessLogs`. This copies the file to an [Apache Hive style](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-AlterPartition) prefix.
 
-    ![infrastructure-overview](images/moveAccessLogs.png)
+    ![infrastructure-overview](images/copyAccessLogs.png)
 
 - An hourly scheduled AWS Lambda function `transformPartition` that runs an [INSERT INTO](https://docs.aws.amazon.com/athena/latest/ug/insert-into.html) query on a single partition per run, taking one hour of data into account. It writes the content of the partition to the Apache Parquet format into the `<StackName>-cf-access-logs` S3 bucket.
 
@@ -29,13 +29,13 @@ The application has two main parts:
 
 Use the _Launch Stack_ button above to start the deployment of the application to your account. The AWS Management Console will guide you through the process. You can override the following parameters during deployment:
 
-- The `NewKeyPrefix` (default: `new/`) is the S3 prefix that is used in the configuration of your Amazon CloudFront distribution for log storage. The AWS Lambda function will move the files from here.
+- The `NewKeyPrefix` (default: `new/`) is the S3 prefix that is used in the configuration of your Amazon CloudFront distribution for log storage. The AWS Lambda function will copy the files from here.
 - The `GzKeyPrefix` (default: `partitioned-gz/`) and `ParquetKeyPrefix` (default: `partitioned-parquet/`) are the S3 prefixes for partitions that contain gzip or Apache Parquet files.
 - `ResourcePrefix` (default: `myapp`) is a prefix that is used for the S3 bucket and the AWS Glue database to prevent naming collisions.
 
 The stack contains a single S3 bucket called `<ResourcePrefix>-<AccountId>-cf-access-logs`. After the deployment you can modify your existing Amazon CloudFront distribution configuration to deliver access logs to this bucket with the `new/` log prefix.
 
-As soon Amazon CloudFront delivers new access logs, files will be moved to `GzKeyPrefix`. After 1-2 hours, they will be transformed to files in `ParquetKeyPrefix`.
+As soon Amazon CloudFront delivers new access logs, files will be copied to `GzKeyPrefix`. After 1-2 hours, they will be transformed to files in `ParquetKeyPrefix`.
 
 You can query your access logs at any time in the [Amazon Athena Query editor](https://console.aws.amazon.com/athena/home#query) using the AWS Glue view called `combined` in the database called `<ResourcePrefix>_cf_access_logs_db`:
 
