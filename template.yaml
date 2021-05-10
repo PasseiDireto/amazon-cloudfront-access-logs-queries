@@ -10,14 +10,6 @@ Description: >
     Athena and AWS Glue).
 
 Parameters:
-  ResourcePrefix: 
-    Type: String
-    Default: 'myapp'
-    AllowedPattern: '[a-z0-9]+'
-    MinLength: 1
-    MaxLength: 20
-    Description: >
-        Prefix that is used for the created resources (20 chars, a-z and 0-9 only)
   CloudFrontAccessLogsBucketName:
     Type: String
     Description: >
@@ -55,6 +47,14 @@ Parameters:
     Type: String
     Description: >
         AWS Glue Database to create tables for
+  TableNamePrefix: 
+    Type: String
+    Default: 'cf_logs'
+    AllowedPattern: '[a-z0-9_\-]+'
+    MinLength: 1
+    MaxLength: 20
+    Description: >
+        Prefix that is used for the created tables
 
 Resources:
     TransformMissingGzDataDailyFn:
@@ -283,7 +283,7 @@ Resources:
         CatalogId: !Ref AWS::AccountId
         DatabaseName: !Ref GlueDatabaseName
         TableInput:
-          Name: 'poc_cf_partitioned_gz'
+          Name: !Sub "${TableNamePrefix}_partitioned_gz"
           Description: 'Gzip logs delivered by Amazon CloudFront partitioned'
           TableType: EXTERNAL_TABLE
           Parameters: { "skip.header.line.count": "2" }
@@ -378,7 +378,7 @@ Resources:
         CatalogId: !Ref AWS::AccountId
         DatabaseName: !Ref GlueDatabaseName
         TableInput:
-          Name: 'poc_cf_partitioned_parquet'
+          Name: !Sub "${TableNamePrefix}_partitioned_parquet"
           Description: 'Parquet format access logs as transformed from gzip version'
           TableType: EXTERNAL_TABLE
           Parameters: { 'has_encrypted_data': 'false', 'parquet.compression': 'SNAPPY' }
@@ -470,7 +470,7 @@ Resources:
         CatalogId: !Ref AWS::AccountId
         DatabaseName: !Ref GlueDatabaseName
         TableInput:
-          Name: 'poc_cf_combined'
+          Name: !Sub "${TableNamePrefix}_combined"
           Description: 'combined view over gzip and parquet tables'
           TableType: VIRTUAL_VIEW
           Parameters: { 'presto_view': 'true' }
