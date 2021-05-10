@@ -229,7 +229,7 @@ Resources:
               HourlyEvt:
                 Type: Schedule
                 Properties:
-                  Schedule: cron(30 * * * ? *)
+                  Schedule: cron(45 * * * ? *)
     ProcessedAccessLogsBucket :
         Type: "AWS::S3::Bucket"
         Description: "Bucket for processed access logs"
@@ -244,6 +244,17 @@ Resources:
               BlockPublicPolicy: Yes
               IgnorePublicAcls: Yes
               RestrictPublicBuckets: Yes
+            LifecycleConfiguration:
+              Rules:
+                - Id: ExpireAll
+                  Status: Enabled
+                  ExpirationInDays: 180
+                - Id: GzKeyIARule
+                  Status: Enabled
+                  Prefix: !Ref GzKeyPrefix
+                  Transitions:
+                    - TransitionInDays: 30
+                      StorageClass: STANDARD_IA
     ProcessedAccessLogsBucketPolicy:
       Type: "AWS::S3::BucketPolicy"
       Properties:

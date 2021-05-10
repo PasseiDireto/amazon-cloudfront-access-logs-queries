@@ -15,10 +15,10 @@ exports.handler = async (event, context, callback) => {
     const date = new Date(event.time);
     date.setHours(date.getHours() - 1);
 
-    const year = partitionHour.getUTCFullYear();
-    const month = (partitionHour.getUTCMonth() + 1).toString().padStart(2, '0');
-    const day = partitionHour.getUTCDate().toString().padStart(2, '0');
-    const hour = partitionHour.getUTCHours().toString().padStart(2, '0');
+    const year = date.getUTCFullYear();
+    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = date.getUTCDate().toString().padStart(2, '0');
+    const hour = date.getUTCHours().toString().padStart(2, '0');
 
     const listPrefix = `${sourcePrefix}${sourceCloudFrontDistribution}.${year}-${month}-${day}-${hour}`;
 
