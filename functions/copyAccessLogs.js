@@ -1,52 +1,51 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
-const aws = require('aws-sdk');
-const s3 = new aws.S3({ apiVersion: '2006-03-01' });
+const aws = require("aws-sdk");
+const s3 = new aws.S3({ apiVersion: "2006-03-01" });
 
+const sourceBucket = process.env.SOURCE_BUCKET;
+const sourcePrefix = process.env.SOURCE_PREFIX;
+const sourceCloudFrontDistribution = process.env.SOURCE_CLOUDFRONT_DISTRIBUTION;
+const targetBucket = process.env.TARGET_BUCKET;
 // prefix to copy partitioned data to w/o leading but w/ trailing slash
 const targetKeyPrefix = process.env.TARGET_KEY_PREFIX;
 
-// regex for filenames by Amazon CloudFront access logs. Groups:
-// - 1.	year
-// - 2.	month
-// - 3.	day 
-// - 4.	hour
-const datePattern = '[^\\d](\\d{4})-(\\d{2})-(\\d{2})-(\\d{2})[^\\d]';
-const filenamePattern = '[^/]+$';
-
 exports.handler = async (event, context, callback) => {
-  const copies = event.Records.map(record => {
-    const bucket = record.s3.bucket.name;
-    const sourceKey = record.s3.object.key;
+  try {
+    const date = new Date(event.time);
+    date.setHours(date.getHours() - 1);
 
-    const sourceRegex = new RegExp(datePattern, 'g');
-    const match = sourceRegex.exec(sourceKey);
-    if (match == null) {
-      console.log(`Object key ${sourceKey} does not look like an access log file, so it will not be copied.`);
-    } else {
-      const [, year, month, day, hour] = match;
+    const year = partitionHour.getUTCFullYear();
+    const month = (partitionHour.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = partitionHour.getUTCDate().toString().padStart(2, '0');
+    const hour = partitionHour.getUTCHours().toString().padStart(2, '0');
 
-      const filenameRegex = new RegExp(filenamePattern, 'g');
-      const filename = filenameRegex.exec(sourceKey)[0];
+    const listPrefix = `${sourcePrefix}${sourceCloudFrontDistribution}.${year}-${month}-${day}-${hour}`;
 
+    console.log(`Copying ${listPrefix} from bucket ${sourceBucket}`);
+
+    const listParams = {
+      Bucket: sourceBucket,
+      Prefix: listPrefix,
+    };
+    const listResult = await s3.listObjects(listParams).promise();
+
+    console.log(`${listResult.Contents.length} logs found`);
+
+    const copies = listResult.Contents.map(async (content) => {
+      const [, filename] = content.Key.split(sourcePrefix);
       const targetKey = `${targetKeyPrefix}year=${year}/month=${month}/day=${day}/hour=${hour}/${filename}`;
-      console.log(`Copying ${sourceKey} to ${targetKey}.`);
-
       const copyParams = {
-        CopySource: bucket + '/' + sourceKey,
-        Bucket: bucket,
-        Key: targetKey
+        CopySource: sourceBucket + "/" + content.Key,
+        Bucket: targetBucket,
+        Key: targetKey,
       };
-      const copy = s3.copyObject(copyParams).promise();
+      await s3.copyObject(copyParams).promise();
+      console.log(`Copied ${filename}.`);
+    });
 
-      return copy.then(function () {
-        console.log(`Copied ${sourceKey}.`);
-      }, function (reason) {
-        var error = new Error(`Error while copying ${sourceKey}: ${reason}`);
-        callback(error);
-      });
-
-    }
-  });
-  await Promise.all(copies);
+    await Promise.all(copies);
+  } catch (error) {
+    callback(error);
+  }
 };
