@@ -14,7 +14,7 @@ Parameters:
     Type: String
     Description: >
         Bucket for Amazon CloudFront access logs
-  CloudFrontDistributionName:
+  CloudFrontDistributionId:
     Type: String
     Description: >
         Name of CloudFront distribution
@@ -222,7 +222,7 @@ Resources:
                 Variables:
                     SOURCE_BUCKET: !Ref CloudFrontAccessLogsBucketName
                     SOURCE_PREFIX: !Ref NewKeyPrefix
-                    SOURCE_CLOUDFRONT_DISTRIBUTION: !Ref CloudFrontDistributionName
+                    SOURCE_CLOUDFRONT_DISTRIBUTION: !Ref CloudFrontDistributionId
                     TARGET_BUCKET: !Ref ProcessedAccessLogsBucketName
                     TARGET_KEY_PREFIX: !Ref GzKeyPrefix
             Events:
