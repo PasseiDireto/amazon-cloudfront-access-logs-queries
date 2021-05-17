@@ -1,13 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-    Stack that deploys a bucket which you can use as a target for your
-    Amazon CloudFront access logs (use the prefix 'new/'). An event
-    notification is configured so that new objects created will fire an
-    AWS Lambda function that copies the objects to prefixes (under
-    'partitioned-gz/') that adhere to the Apache Hive partitioning format.
-    This way the data is easier to consume for big data tools (as Amazon
-    Athena and AWS Glue).
+    Stack that deploys a bucket which receives CloudFront access logs
+    from another bucket and are optimized to be consumed by big data
+    tools (as Amazon Athena and AWS Glue)
 
 Parameters:
   CloudFrontAccessLogsBucketName:
