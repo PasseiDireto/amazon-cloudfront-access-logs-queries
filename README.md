@@ -7,41 +7,21 @@ This is a sample implementation for the concepts described in the AWS blog post 
 [AWS Lambda](https://aws.amazon.com/lambda/), and
 [Amazon Simple Storage Service](https://aws.amazon.com/s3/) (S3).
 
-This application is available in the AWS Serverless Application Repository. You can deploy it to your account from there:
-
-[![cloudformation-launch-button](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://serverlessrepo.aws.amazon.com/#/applications/arn:aws:serverlessrepo:us-east-1:387304072572:applications~amazon-cloudfront-access-logs-queries)
+This fork alters the [original implementation](https://github.com/aws-samples/amazon-cloudfront-access-logs-queries) by allowing access logs being processed from a bucket not managed by the stack and have a few other parameters.
 
 ## Overview
 
 The application has two main parts:
 
-- An S3 bucket `<StackName>-cf-access-logs` that serves as a log bucket for Amazon CloudFront access logs. As soon as Amazon CloudFront delivers a new access logs file, an event triggers the AWS Lambda function `copyAccessLogs`. This copies the file to an [Apache Hive style](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-AlterPartition) prefix.
+- An S3 bucket `ProcessedAccessLogsBucketName` that receives copies of access logs sent to another (already existing) bucket for Amazon CloudFront access logs. Hourly an event triggers the AWS Lambda function `copyAccessLogs` that copies access logs from the previous hour from the original bucket to an [Apache Hive style](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-AlterPartition) prefix in the bucket managed by the stack.
 
     ![infrastructure-overview](images/copyAccessLogs.png)
 
-- An hourly scheduled AWS Lambda function `transformPartition` that runs an [INSERT INTO](https://docs.aws.amazon.com/athena/latest/ug/insert-into.html) query on a single partition per run, taking one hour of data into account. It writes the content of the partition to the Apache Parquet format into the `<StackName>-cf-access-logs` S3 bucket.
+- An hourly scheduled AWS Lambda function `transformPartition` that runs an [INSERT INTO](https://docs.aws.amazon.com/athena/latest/ug/insert-into.html) query on a single partition per run, taking one hour of data into account. It writes the content of the partition to the Apache Parquet format into the `ProcessedAccessLogsBucketName` S3 bucket.
 
     ![infrastructure-overview](images/transformPartition.png)
 
 ## FAQs
-
-### Q: How can I get started?
-
-Use the _Launch Stack_ button above to start the deployment of the application to your account. The AWS Management Console will guide you through the process. You can override the following parameters during deployment:
-
-- The `NewKeyPrefix` (default: `new/`) is the S3 prefix that is used in the configuration of your Amazon CloudFront distribution for log storage. The AWS Lambda function will copy the files from here.
-- The `GzKeyPrefix` (default: `partitioned-gz/`) and `ParquetKeyPrefix` (default: `partitioned-parquet/`) are the S3 prefixes for partitions that contain gzip or Apache Parquet files.
-- `ResourcePrefix` (default: `myapp`) is a prefix that is used for the S3 bucket and the AWS Glue database to prevent naming collisions.
-
-The stack contains a single S3 bucket called `<ResourcePrefix>-<AccountId>-cf-access-logs`. After the deployment you can modify your existing Amazon CloudFront distribution configuration to deliver access logs to this bucket with the `new/` log prefix.
-
-As soon Amazon CloudFront delivers new access logs, files will be copied to `GzKeyPrefix`. After 1-2 hours, they will be transformed to files in `ParquetKeyPrefix`.
-
-You can query your access logs at any time in the [Amazon Athena Query editor](https://console.aws.amazon.com/athena/home#query) using the AWS Glue view called `combined` in the database called `<ResourcePrefix>_cf_access_logs_db`:
-
-```sql
-SELECT * FROM cf_access_logs.combined limit 10;
-```
 
 ### Q: How can I customize and deploy the template?
 
@@ -72,15 +52,35 @@ SELECT * FROM cf_access_logs.combined limit 10;
         --template-file packaged.yaml
         --stack-name my-stack
         --capabilities CAPABILITY_IAM
+        --parameter-overrides CloudFrontAccessLogsBucketName=cf_logs_bucket CloudFrontDistributionId=cf_distribution_id ProcessedAccessLogsBucketName=my-bucket GlueDatabaseName=db_name
     ```
+
+The following parameters must be provided:
+
+- `CloudFrontAccessLogsBucketName`: Bucket where access logs are delivered from CloudFront. This bucket is not created nor managed by this stack;
+- `CloudFrontDistributionId`: The CloudFront distribution ID from which logs will be fetched. This is necessary to match the filenames of access logs to be copied;
+- `ProcessedAccessLogsBucketName`: Name of the bucket that this stack will create and host the partitioned logs (both in gz and parquet format);
+- `GlueDatabaseName`: Already existing Glue Database on which the new Tables managed by the stack will be created.
+
+You can also override other parameters during deployment:
+
+- `NewKeyPrefix` (default: `new/`) is the S3 prefix that is used in the configuration of your Amazon CloudFront distribution for log storage. The AWS Lambda function will copy the files from here in the "CloudFrontAccessLogsBucket";
+- `GzKeyPrefix` (default: `partitioned-gz/`) and `ParquetKeyPrefix` (default: `partitioned-parquet/`) are the S3 prefixes for partitions that contain gzip or Apache Parquet files in the "ProcessedAccessLogsBucket";
+- `TableNamePrefix` (default: `cf_logs`) is a prefix that is used for the Tables created to give more context and prevent naming collisions.
+
+### Q: How can I query data?
+
+After 0-1 hour Amazon CloudFront delivers new access logs, files will be copied to `GzKeyPrefix`. After 1-2 hours, they will be transformed to files in `ParquetKeyPrefix`.
+
+You can query your access logs at any time in the [Amazon Athena Query editor](https://console.aws.amazon.com/athena/home#query) using the AWS Glue view called `<TableNamePrefix>_combined` in the `<GlueDatabaseName>` database:
+
+```sql
+SELECT * FROM glue_db.cf_logs_combined limit 10;
+```
 
 ### Q: How can I use the sample application for multiple Amazon CloudFront distributions?
 
-Deploy another AWS CloudFormation stack from the same template to create a new bucket for different distributions or environments. The stack name is added to all resource names (e.g. AWS Lambda functions, S3 bucket etc.) so you can distinguish the different stacks in the AWS Management Console.
-
-### Q: In which region can I deploy the sample application?
-
-The _Launch Stack_ button above opens the AWS Serverless Application Repository in the US East 1 (Northern Virginia) region. You may switch to other regions from there before deployment.
+Deploy another AWS CloudFormation stack from the same template to create a new bucket for different distributions or environments. You can override the stack parameters for customization on each deployment.
 
 ### Q: How can I add a new question to this list?
 
