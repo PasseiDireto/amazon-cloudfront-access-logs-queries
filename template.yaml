@@ -13,7 +13,7 @@ Parameters:
   CloudFrontDistributionId:
     Type: String
     Description: >
-        Name of CloudFront distribution
+        Id of CloudFront distribution
   NewKeyPrefix: 
     Type: String
     Default: 'new/'
